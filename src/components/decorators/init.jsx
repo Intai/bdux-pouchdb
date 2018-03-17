@@ -1,4 +1,4 @@
-import R from 'ramda'
+import * as R from 'ramda'
 import React from 'react'
 import PouchDBAction from '../../actions/pouchdb-action'
 
@@ -10,11 +10,6 @@ export const decorateComponent = (Component = R.F) => (
   class extends React.Component {
     static displayName = getDisplayName(Component)
     static defaultProps = {}
-
-    /* istanbul ignore next */
-    constructor() {
-      super()
-    }
 
     componentDidMount() {
       PouchDBAction.init()

@@ -31,22 +31,23 @@ const getPouchStream = (action) => ({ src, target, options = {}, name = '' }) =>
 )
 
 const getSyncStreams = () => (
-  R.mergeAll(
-    R.map(getPouchStream('sync'), config().sync)
-  )
+  R.map(getPouchStream('sync'), config().sync)
 )
 
 const getReplicateStreams = () => (
-  R.mergeAll(
-    R.map(getPouchStream('replicate'), config().replicate)
-  )
+  R.map(getPouchStream('replicate'), config().replicate)
+)
+
+const getChangeStreams = R.converge(
+  R.concat, [
+    getSyncStreams,
+    getReplicateStreams
+  ]
 )
 
 const getStatesProperty = () => (
-  Bacon.update({},
-    [getSyncStreams()], R.merge,
-    [getReplicateStreams()], R.merge
-  )
+  Bacon.mergeAll(getChangeStreams)
+    .scan({}, R.merge)
 )
 
 const start = () => (
@@ -68,6 +69,16 @@ const onceThenNull = (func) => {
   )
 }
 
+export const load = () => (
+  Bacon.combineTemplate({
+    type: ActionTypes.POUCHDB_UPDATE,
+    states: Bacon.combineAsArray(getChangeStreams())
+      .map(R.mergeAll),
+    skipLog: true
+  })
+  .first()
+)
+
 export const init = () => {
   if (Common.isOnClient()) {
     initStream.push(true)
@@ -76,5 +87,6 @@ export const init = () => {
 
 export default bindToDispatch({
   start: onceThenNull(start),
+  load,
   init
 })
