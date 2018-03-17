@@ -63,8 +63,8 @@
     "sinon": "^4.4.6"
   },
   "peerDependencies": {
-    "baconjs": "^0.7.94",
-    "bdux": "^0.1.31",
-    "react": "^15.4.0"
+    "baconjs": "^1.0.0 || ^2.0.0",
+    "bdux": "^16.2.0",
+    "react": "^16.2.0"
   }
 }
