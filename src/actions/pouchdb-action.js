@@ -8,26 +8,46 @@ import { bindToDispatch } from 'bdux'
 
 const initStream = new Bacon.Bus()
 
-const objOf = (name) => (
-  (name)
-    ? R.objfOf(name)
-    : R.identity
+const getAllDocs = ({ rows }) => (
+  R.pluck('doc', rows)
 )
 
-const getPouchDocs = ({ docs }) => (
-  (docs && docs.length === 1)
-    ? docs[0] : docs
-)
+const fetchAllDocs = (...args) => {
+  const db = new PouchDB(...args)
+  return db.allDocs({ include_docs: true })
+    .then(getAllDocs)
+}
 
-const getPouchStream = (action) => ({ src, target, options = {}, name = '' }) => (
+const sync = (callback, { src, target, options = {} }) => {
+  PouchDB.replicate(target, src)
+    .on('complete', () => {
+      fetchAllDocs(src)
+        .then(callback)
+
+      PouchDB.sync(src, target, options)
+        .on('change', ({ direction, change }) => {
+          if (direction === 'pull') {
+            callback(change.docs)
+          }
+        })
+    })
+}
+
+const replicate = (callback, { src, target, options = {} }) => {
+  PouchDB.replicate(src, target, options)
+    .on('complete', () => {
+      fetchAllDocs(target)
+        .then(callback)
+    })
+}
+
+const getPouchStream = (action) => (config) => (
   Bacon.fromCallback((callback) => {
-    PouchDB[action](src, target, options)
-      .on('change', function (info) {
-        callback(info)
-      })
+    ((action === 'sync')
+      ? sync
+      : replicate
+    )(callback, config)
   })
-  .map(getPouchDocs)
-  .map(objOf(name))
 )
 
 const getSyncStreams = () => (
@@ -46,17 +66,18 @@ const getChangeStreams = R.converge(
 )
 
 const getStatesProperty = () => (
-  Bacon.mergeAll(getChangeStreams)
-    .scan({}, R.merge)
+  Bacon.mergeAll(getChangeStreams())
+    .scan({}, R.reduce(R.merge))
 )
 
 const start = () => (
   Bacon.combineTemplate({
     type: ActionTypes.POUCHDB_UPDATE,
-    states: getStatesProperty()
-      .sampledBy(initStream.debounce(1)),
+    states: getStatesProperty(),
+    init: initStream.debounce(1),
     skipLog: true
   })
+  .map(R.dissoc('init'))
   .changes()
 )
 

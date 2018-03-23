@@ -12,12 +12,13 @@ const isUpdate = isAction(
 )
 
 const hasPouchState = ({ name, action }) => (
-  action.states && name in action.states
+  action.states && R.has(name, action.states)
 )
 
-const getPouchState = (args) => (
-  R.assoc('state', args.action.states[args.name], args)
-)
+const getPouchState = (args) => {
+  const { action, name } = args
+  return R.assoc('state', action.states[name], args)
+}
 
 const mapPouchUpdate = R.when(
   R.both(isUpdate, hasPouchState),
