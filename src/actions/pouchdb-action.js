@@ -41,6 +41,12 @@ const replicate = (callback, { src, target, options = {} }) => {
     })
 }
 
+const objOf = (name) => (
+  (name)
+    ? R.pipe(R.objOf(name), R.of)
+    : R.identity
+)
+
 const getPouchStream = (action) => (config) => (
   Bacon.fromCallback((callback) => {
     ((action === 'sync')
@@ -48,6 +54,7 @@ const getPouchStream = (action) => (config) => (
       : replicate
     )(callback, config)
   })
+  .map(objOf(config.name))
 )
 
 const getSyncStreams = () => (
