@@ -7,7 +7,7 @@ const isAction = R.pathEq(
   ['action', 'type']
 )
 
-const isUpdate = isAction(
+export const isPouchDBUpdate = isAction(
   ActionTypes.POUCHDB_UPDATE
 )
 
@@ -21,7 +21,7 @@ const getPouchState = (args) => {
 }
 
 const mapPouchUpdate = R.when(
-  R.both(isUpdate, hasPouchState),
+  R.both(isPouchDBUpdate, hasPouchState),
   getPouchState
 )
 

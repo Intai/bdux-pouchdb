@@ -18,27 +18,53 @@ const fetchAllDocs = (...args) => {
     .then(getAllDocs)
 }
 
-const sync = (callback, { src, target, options = {} }) => {
+const handleChange = (sink, name, target) => ({ direction, change }) => {
+  if (direction === 'pull' && change.docs_written > 0) {
+    if (name) {
+      fetchAllDocs(target)
+        .then(sink)
+    } else {
+      sink(change.docs)
+    }
+  }
+}
+
+const handleComplete = (sink, target) => (info) => {
+  const endStream = () => sink(new Bacon.End());
+
+  if (info.docs_written > 0) {
+    fetchAllDocs(target)
+      .then(sink)
+      .then(endStream)
+  } else {
+    endStream()
+  }
+}
+
+const syncPouchStream = (sink, { name, src, target, options = {} }) => {
+  fetchAllDocs(src)
+    .then(sink)
+
   PouchDB.replicate(target, src)
-    .on('complete', () => {
-      fetchAllDocs(src)
-        .then(callback)
+    .on('complete', (info) => {
+      if (info.docs_written > 0) {
+        fetchAllDocs(src)
+          .then(sink)
+      }
 
       PouchDB.sync(src, target, options)
-        .on('change', ({ direction, change }) => {
-          if (direction === 'pull') {
-            callback(change.docs)
-          }
-        })
+        .on('change', handleChange(sink, name, src))
+        .on('complete', handleComplete(sink, src))
     })
 }
 
-const replicate = (callback, { src, target, options = {} }) => {
+const replicatePouchStream = (sink, { name, src, target, options = {} }) => {
+  fetchAllDocs(target)
+    .then(sink)
+
   PouchDB.replicate(src, target, options)
-    .on('complete', () => {
-      fetchAllDocs(target)
-        .then(callback)
-    })
+    .on('change', handleChange(sink, name, target))
+    .on('complete', handleComplete(sink, target))
 }
 
 const objOf = (name) => (
@@ -48,11 +74,11 @@ const objOf = (name) => (
 )
 
 const getPouchStream = (action) => (config) => (
-  Bacon.fromCallback((callback) => {
+  Bacon.fromBinder((sink) => {
     ((action === 'sync')
-      ? sync
-      : replicate
-    )(callback, config)
+      ? syncPouchStream
+      : replicatePouchStream
+    )(sink, config)
   })
   .map(objOf(config.name))
 )
@@ -97,6 +123,26 @@ const onceThenNull = (func) => {
   )
 }
 
+export const sync = (config) => (
+  Bacon.combineTemplate({
+    type: ActionTypes.POUCHDB_UPDATE,
+    states: getPouchStream('sync')(config)
+      .map(R.mergeAll),
+    config,
+    skipLog: true
+  })
+)
+
+export const replicate = (config) => (
+  Bacon.combineTemplate({
+    type: ActionTypes.POUCHDB_UPDATE,
+    states: getPouchStream('replicate')(config)
+      .map(R.mergeAll),
+    config,
+    skipLog: true
+  })
+)
+
 export const load = () => (
   Bacon.combineTemplate({
     type: ActionTypes.POUCHDB_UPDATE,
@@ -116,5 +162,7 @@ export const init = () => {
 export default bindToDispatch({
   start: onceThenNull(start),
   load,
+  sync,
+  replicate,
   init
 })
