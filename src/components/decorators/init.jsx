@@ -1,6 +1,6 @@
 import * as R from 'ramda'
 import React from 'react'
-import PouchDBAction from '../../actions/pouchdb-action'
+import * as PouchDBAction from '../../actions/pouchdb-action'
 
 const getDisplayName = (Component) => (
   Component.displayName || Component.name || 'Component'

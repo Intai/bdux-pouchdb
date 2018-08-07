@@ -1,7 +1,7 @@
 import * as R from 'ramda'
 import Bacon from 'baconjs'
 import ActionTypes from './actions/action-types'
-import PouchDBAction from './actions/pouchdb-action'
+import * as PouchDBAction from './actions/pouchdb-action'
 
 const isAction = R.pathEq(
   ['action', 'type']
@@ -31,11 +31,11 @@ const getPreOutput = (preStream) => (
     .map(mapPouchUpdate)
 )
 
-export const getPreReduce = () => {
+export const getPreReduce = ({ dispatch }) => {
   const preStream = new Bacon.Bus()
 
   // start receiving changes from pouchdb.
-  PouchDBAction.start()
+  dispatch(PouchDBAction.startOnce())
 
   return {
     input: preStream,
