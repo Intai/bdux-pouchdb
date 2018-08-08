@@ -10,6 +10,11 @@ PouchDB.plugin(PouchDBFind)
 const initStream = new Bacon.Bus()
 const updateStream = new Bacon.Bus()
 
+const isDesignDoc = R.propSatisfies(
+  R.test(/^_design\//),
+  '_id'
+)
+
 const getAllDocs = ({ rows }) => (
   R.pluck('doc', rows)
 )
@@ -17,6 +22,7 @@ const getAllDocs = ({ rows }) => (
 const fetchAllDocs = (db) => (
   db.allDocs({ include_docs: true })
     .then(getAllDocs)
+    .then(R.reject(isDesignDoc))
 )
 
 const findDocs = (db, find) => (
@@ -61,7 +67,8 @@ const handleChange = (sink, name, config) => ({ direction, change }) => {
     if (config.to && config.to.storeName) {
       return sinkDocs(sink, name, config)
     } else {
-      sink(R.mergeAll(change.docs))
+      sink(R.mergeAll(
+        R.reject(isDesignDoc, change.docs)))
     }
   }
 }
@@ -113,7 +120,7 @@ const getSyncStream = fromBinder((sink, config) => {
 
   async.waitFor(sinkDocs)(sink, src, config)
 
-  PouchDB.replicate(target, src)
+  PouchDB.replicate(target, src, options)
     .on('complete', (info) => {
       if (info.docs_written > 0) {
         async.waitFor(sinkDocs)(sink, src, config)
