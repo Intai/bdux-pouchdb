@@ -187,6 +187,38 @@ export const start = () => (
   .changes()
 )
 
+const addConfig = (propName, func) => (config) => {
+  if (config[propName]) {
+    return func(config)
+      .map(R.objOf('data'))
+      .map(R.assoc('config', config[propName]))
+  }
+}
+
+const getPouchStreamsForAdmin = R.pipe(
+  R.juxt([
+    addConfig('sync', getSyncStream),
+    addConfig('replicate', getReplicateStream),
+    addConfig('changes', getChangesStream)
+  ]),
+  R.filter(R.identity),
+  Bacon.mergeAll
+)
+
+const getAdminStream = () => (
+  updateStream
+    .flatMap(getPouchStreamsForAdmin)
+)
+
+export const startAdmin = () => (
+  Bacon.combineTemplate({
+    type: ActionTypes.POUCHDB_ADMIN,
+    update: getAdminStream(),
+    skipLog: true
+  })
+  .changes()
+)
+
 const onceThenNull = (func) => {
   let count = 0
   return () => (
@@ -198,6 +230,10 @@ const onceThenNull = (func) => {
 
 export const startOnce = onceThenNull(
   start
+)
+
+export const startAdminOnce = onceThenNull(
+  startAdmin
 )
 
 const createConfigChain = () => {
@@ -240,6 +276,7 @@ export const init = () => {
 }
 
 export default {
+  startAdmin: startAdminOnce,
   sync,
   replicate,
   changes
