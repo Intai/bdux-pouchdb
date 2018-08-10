@@ -16,41 +16,63 @@ const requireAceEditor = () => {
   }
 }
 
-const renderTarget = ({ data }, src) => {
+const handleEditorBlur = (map) => (e, editor) => {
+  map.set('states', JSON.parse(editor.getValue()))
+}
+
+const handleUpdate = (map, dispatch) => () => {
+  dispatch(PouchDBAction.put({
+    name: map.get('name'),
+    states: map.get('states'),
+    options: {
+      auth: {
+        username: 'admin',
+        password: 'admin'
+      }
+    }
+  }))
+}
+
+const renderTarget = ({ dispatch }) => function AdminTarget(target, name) {
   const AceEditor = requireAceEditor()
+  const map = new Map(Object.entries(target))
+
   return (
-    <div key={src}>
-      {src}
+    <div key={name}>
+      {name}
       <AceEditor
         fontSize={14}
         highlightActiveLine
         mode="json"
+        onBlur={handleEditorBlur(map)}
         setOptions={{ tabSize: 2, wrap: 80 }}
         showGutter={false}
         theme="xcode"
-        value={JSON.stringify(data, null, 2)}
+        value={JSON.stringify(target.states, null, 2)}
       />
+      <button
+        onClick={handleUpdate(map, dispatch)}
+        type="button"
+      >
+        {'Update'}
+      </button>
     </div>
   )
 }
 
-const renderList = R.ifElse(
-  R.both(R.identity, requireAceEditor),
-  R.pipe(
-    R.mapObjIndexed(renderTarget),
-    R.values
-  ),
-  R.F
+const renderTargets = ({ targets, ...props }) => (
+  !!(targets && requireAceEditor())
+    && R.values(R.mapObjIndexed(renderTarget(props), targets))
 )
 
 const renderMessage = () => (
   !requireAceEditor() && 'Please npm install react-ace'
 )
 
-export const Admin = ({ targets }) => (
+export const Admin = (props) => (
   <React.Fragment>
     {renderMessage()}
-    {renderList(targets)}
+    {renderTargets(props)}
   </React.Fragment>
 )
 
@@ -59,9 +81,7 @@ const decorate = R.pipe(
   createComponent(
     {
       targets: AdminStore
-    },
-    // start listening to pouchdb updates for admin.
-    PouchDBAction.startAdminOnce
+    }
   )
 )
 

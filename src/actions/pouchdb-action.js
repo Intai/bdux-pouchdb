@@ -3,12 +3,8 @@ import Bacon from 'baconjs'
 import PouchDB from 'pouchdb'
 import PouchDBFind from 'pouchdb-find'
 import ActionTypes from './action-types'
-import Common from '../utils/common-util'
 
 PouchDB.plugin(PouchDBFind)
-
-const initStream = new Bacon.Bus()
-const updateStream = new Bacon.Bus()
 
 const isDesignDoc = R.propSatisfies(
   R.test(/^_design\//),
@@ -79,6 +75,10 @@ const handleComplete = (sink, name, config) => (info) => {
   }
 }
 
+const handleError = (sink, name, config) => (error) => {
+  sink(new Bacon.Error({ name, config, error }))
+}
+
 const fromBinder = (func) => (config) => (
   Bacon.fromBinder((sink) => {
     func(sink, config)
@@ -120,7 +120,9 @@ const getSyncStream = fromBinder((sink, config) => {
 
   async.waitFor(sinkDocs)(sink, src, config)
 
-  PouchDB.replicate(target, src, options)
+  PouchDB.replicate(target, src, { ...options, live: false })
+    .on('denied', async.waitFor(handleError(sink, src, config)))
+    .on('error', async.endAfter(handleError(sink, src, config)))
     .on('complete', (info) => {
       if (info.docs_written > 0) {
         async.waitFor(sinkDocs)(sink, src, config)
@@ -129,6 +131,8 @@ const getSyncStream = fromBinder((sink, config) => {
       PouchDB.sync(src, target, options)
         .on('change', async.waitFor(handleChange(sink, src, config)))
         .on('complete', async.endAfter(handleComplete(sink, src, config)))
+        .on('denied', async.waitFor(handleError(sink, src, config)))
+        .on('error', async.endAfter(handleError(sink, src, config)))
     })
 })
 
@@ -142,16 +146,21 @@ const getReplicateStream = fromBinder((sink, config) => {
   PouchDB.replicate(src, target, options)
     .on('change', async.waitFor(handleChange(sink, target, config)))
     .on('complete', async.endAfter(handleComplete(sink, target, config)))
+    .on('denied', async.waitFor(handleError(sink, target, config)))
+    .on('error', async.endAfter(handleError(sink, target, config)))
 })
 
 const getChangesStream = fromBinder((sink, config) => {
   const async = createAsync(sink)
   const { changes } = config
   const { name, options = {} } = changes
+  const db = new PouchDB(name)
 
-  PouchDB.changes(options)
+  db.changes(options)
     .on('change', async.waitFor(handleChange(sink, name, config)))
     .on('complete', async.endAfter(handleComplete(sink, name, config)))
+    .on('denied', async.waitFor(handleError(sink, name, config)))
+    .on('error', async.endAfter(handleError(sink, name, config)))
 })
 
 const whenHasProp = (propName, func) => R.ifElse(
@@ -170,28 +179,18 @@ const getPouchStreams = R.pipe(
   Bacon.mergeAll
 )
 
-const getStatesProperty = () => (
-  updateStream
+const getStatesProperty = (configStream) => (
+  configStream
     .flatMap(getPouchStreams)
     .scan({}, R.merge)
 )
 
-export const start = () => (
-  Bacon.combineTemplate({
-    type: ActionTypes.POUCHDB_UPDATE,
-    states: getStatesProperty(),
-    init: initStream,
-    skipLog: true
-  })
-  .map(R.dissoc('init'))
-  .changes()
-)
-
 const addConfig = (propName, func) => (config) => {
-  if (config[propName]) {
+  const args = config[propName]
+  if (args) {
     return func(config)
-      .map(R.objOf('data'))
-      .map(R.assoc('config', config[propName]))
+      .map(R.objOf('states'))
+      .map(R.assoc('name', args.src || args.name))
   }
 }
 
@@ -205,35 +204,36 @@ const getPouchStreamsForAdmin = R.pipe(
   Bacon.mergeAll
 )
 
-const getAdminStream = () => (
-  updateStream
+const getAdminStream = (configStream) => (
+  configStream
     .flatMap(getPouchStreamsForAdmin)
 )
 
-export const startAdmin = () => (
-  Bacon.combineTemplate({
-    type: ActionTypes.POUCHDB_ADMIN,
-    update: getAdminStream(),
+export const createUpdate = (config) => {
+  const configStream = Bacon.once(config)
+  return Bacon.combineTemplate({
+    type: ActionTypes.POUCHDB_UPDATE,
+    states: getStatesProperty(configStream),
+    admin: getAdminStream(configStream),
     skipLog: true
   })
-  .changes()
-)
-
-const onceThenNull = (func) => {
-  let count = 0
-  return () => (
-    (count++ <= 0)
-      ? func()
-      : null
-  )
 }
 
-export const startOnce = onceThenNull(
-  start
+const getDocs = R.pipe(
+  R.values,
+  R.flatten
 )
 
-export const startAdminOnce = onceThenNull(
-  startAdmin
+export const put = ({ name, states, options }) => (
+  Bacon.fromBinder((sink) => {
+    const db = new PouchDB(name, options)
+    const docs = (states._id) ? [states] : getDocs(states)
+    const promises = R.forEach((doc) => db.put(doc), docs)
+
+    Promise.all(promises)
+      .then(() => sink(new Bacon.End()))
+      .catch((error) => sink(new Bacon.Error(error)))
+  })
 )
 
 const createConfigChain = () => {
@@ -251,9 +251,7 @@ const createConfigChain = () => {
     createIndex: updateConfig('createIndex'),
     find: updateConfig('find'),
     to: updateConfig('to'),
-    create() {
-      updateStream.push(config)
-    }
+    create: () => createUpdate(config)
   })
 }
 
@@ -269,14 +267,7 @@ export const changes = (config) => (
   createConfigChain().changes(config)
 )
 
-export const init = () => {
-  if (Common.isOnClient()) {
-    initStream.push(true)
-  }
-}
-
 export default {
-  startAdmin: startAdminOnce,
   sync,
   replicate,
   changes

@@ -9,21 +9,21 @@ const isAction = R.pathEq(
 )
 
 const isAdminUpdate = isAction(
-  ActionTypes.POUCHDB_ADMIN
+  ActionTypes.POUCHDB_UPDATE
 )
 
-const hasConfigSrc = R.path(
-  ['action', 'update', 'config', 'src']
+const hasName = R.path(
+  ['action', 'admin', 'name']
 )
 
-const accumByConfigSrc = (args) => {
-  const { action: { update } } = args
-  return R.assocPath(['state', update.config.src], update, args)
+const accumByName = (args) => {
+  const { action: { admin } } = args
+  return R.assocPath(['state', admin.name], admin, args)
 }
 
 const updateForAdmin = R.when(
-  R.both(isAdminUpdate, hasConfigSrc),
-  accumByConfigSrc
+  R.both(isAdminUpdate, hasName),
+  accumByName
 )
 
 const getOutputStream = (reducerStream) => (
