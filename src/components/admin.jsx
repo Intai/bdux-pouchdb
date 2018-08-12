@@ -17,13 +17,16 @@ const requireAceEditor = () => {
 }
 
 const handleEditorBlur = (map) => (e, editor) => {
-  map.set('states', JSON.parse(editor.getValue()))
+  const states = map.get('states')
+  const newStates = JSON.parse(editor.getValue())
+  map.set('diff', diffObj(states, newStates))
+  map.set('without', withoutObj(states, newStates))
 }
 
 const handleUpdate = (map, dispatch) => () => {
   dispatch(PouchDBAction.put({
     name: map.get('name'),
-    states: map.get('states'),
+    states: map.get('diff'),
     options: {
       auth: {
         username: 'admin',
