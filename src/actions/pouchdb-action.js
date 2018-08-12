@@ -219,20 +219,57 @@ export const createUpdate = (config) => {
   })
 }
 
-const getDocs = R.pipe(
-  R.values,
-  R.flatten
+const mergePutResponse = (doc) => ({ id, rev }) => ({
+  ...doc,
+  _id: id,
+  _rev: rev
+})
+
+const putDoc = (db) => (doc) => (
+  db[doc._id ? 'put' : 'post'](doc)
+    .then(mergePutResponse(doc))
 )
+
+const mapDocsP = (func, isDoc) => (states) => {
+  if (states._id || isDoc === true) {
+    // a single document.
+    return func(states)
+  } else if (states.length > 0) {
+    // array of documents.
+    const promises = R.map(mapDocsP(func, true), states)
+    return Promise.all(promises)
+  } else {
+    // object contains documents.
+    const pairs = R.toPairs(states)
+    const keys = R.pluck(0, pairs)
+    const values = R.pluck(1, pairs)
+    const promises = R.map(mapDocsP(func), values)
+    return Promise.all(promises)
+      .then(R.zipObj(keys))
+  }
+}
+
+const sinkPutUpdate = (sink, name) => (states) => {
+  sink({
+    type: ActionTypes.POUCHDB_UPDATE,
+    states,
+    admin: { name, states },
+    skipLog: true
+  })
+  sink(new Bacon.End())
+}
+
+const sinkPutError = (sink) => (error) => {
+  sink(new Bacon.Error(error))
+  sink(new Bacon.End())
+}
 
 export const put = ({ name, states, options }) => (
   Bacon.fromBinder((sink) => {
     const db = new PouchDB(name, options)
-    const docs = (states._id) ? [states] : getDocs(states)
-    const promises = R.forEach((doc) => db.put(doc), docs)
-
-    Promise.all(promises)
-      .then(() => sink(new Bacon.End()))
-      .catch((error) => sink(new Bacon.Error(error)))
+    mapDocsP(putDoc(db))(states)
+      .then(sinkPutUpdate(sink, name))
+      .catch(sinkPutError(sink))
   })
 )
 
