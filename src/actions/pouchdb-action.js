@@ -251,7 +251,7 @@ const mapDocsP = (func, isDoc) => (states) => {
 
 const sinkPutUpdate = (sink, name) => (states) => {
   sink({
-    type: ActionTypes.POUCHDB_UPDATE,
+    type: ActionTypes.POUCHDB_PUT,
     states,
     admin: { name, states },
     skipLog: true
@@ -264,10 +264,10 @@ const sinkPutError = (sink) => (error) => {
   sink(new Bacon.End())
 }
 
-export const put = ({ name, states, options }) => (
+export const put = ({ name, states, diff, options }) => (
   Bacon.fromBinder((sink) => {
     const db = new PouchDB(name, options)
-    mapDocsP(putDoc(db))(states)
+    mapDocsP(putDoc(db))(diff)
       .then(sinkPutUpdate(sink, name))
       .catch(sinkPutError(sink))
   })

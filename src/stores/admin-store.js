@@ -12,6 +12,15 @@ const isAdminUpdate = isAction(
   ActionTypes.POUCHDB_UPDATE
 )
 
+const isAdminPut = isAction(
+  ActionTypes.POUCHDB_PUT
+)
+
+const isAdminUpdateOrPut = R.either(
+  isAdminUpdate,
+  isAdminPut
+)
+
 const hasName = R.path(
   ['action', 'admin', 'name']
 )
@@ -22,7 +31,7 @@ const accumByName = (args) => {
 }
 
 const updateForAdmin = R.when(
-  R.both(isAdminUpdate, hasName),
+  R.both(isAdminUpdateOrPut, hasName),
   accumByName
 )
 

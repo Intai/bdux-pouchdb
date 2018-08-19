@@ -6,8 +6,9 @@ const isAction = R.pathEq(
   ['action', 'type']
 )
 
-export const isPouchDBUpdate = isAction(
-  ActionTypes.POUCHDB_UPDATE
+export const isPouchDBUpdate = R.either(
+  isAction(ActionTypes.POUCHDB_UPDATE),
+  isAction(ActionTypes.POUCHDB_PUT)
 )
 
 const hasPouchState = ({ name, action }) => (
