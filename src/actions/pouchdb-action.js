@@ -60,12 +60,7 @@ const sinkDocs = (sink, name, config) => {
 
 const handleChange = (sink, name, config) => ({ direction, change }) => {
   if (direction === 'pull' && change.docs_written > 0) {
-    if (config.to && config.to.storeName) {
-      return sinkDocs(sink, name, config)
-    } else {
-      sink(R.mergeAll(
-        R.reject(isDesignDoc, change.docs)))
-    }
+    return sinkDocs(sink, name, config)
   }
 }
 
@@ -182,7 +177,7 @@ const getPouchStreams = R.pipe(
 const getStatesProperty = (configStream) => (
   configStream
     .flatMap(getPouchStreams)
-    .scan({}, R.merge)
+    .toProperty({})
 )
 
 const addConfig = (propName, func) => (config) => {

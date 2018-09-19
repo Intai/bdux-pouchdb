@@ -11,8 +11,19 @@ export const isPouchDBUpdate = R.either(
   isAction(ActionTypes.POUCHDB_PUT)
 )
 
+const hasProp = R.ifElse(
+  R.flip(R.is(Array)),
+  R.useWith(
+    R.any, [
+      R.has,
+      R.identity
+    ]
+  ),
+  R.has
+)
+
 const hasPouchState = ({ name, action }) => (
-  action.states && R.has(name, action.states)
+  action.states && hasProp(name, action.states)
 )
 
 const mergeAll = R.when(
