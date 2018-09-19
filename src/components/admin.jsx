@@ -2,6 +2,7 @@ import * as R from 'ramda'
 import React from 'react'
 import * as PouchDBAction from '../actions/pouchdb-action'
 import AdminStore from '../stores/admin-store'
+import AuthStore from '../stores/auth-store'
 import { pureRender } from './decorators/pure-render'
 import { createComponent } from 'bdux'
 
@@ -21,27 +22,29 @@ const fromMap = R.reduce(
   {}
 )
 
-const handleEditorBlur = (map) => (e, editor) => {
+const handleEditorBlur = (payload) => (e, editor) => {
   const value = editor.getValue()
-  map.set('prevStates', map.get('states'))
-  map.set('states', value && JSON.parse(value))
+  payload.set('prevStates', payload.get('states'))
+  payload.set('states', value && JSON.parse(value))
 }
 
-const handleUpdate = (map, dispatch) => () => {
-  dispatch(PouchDBAction.update({
-    ...fromMap(map),
+const handleUpdate = (payload, dispatch) => () => {
+  dispatch(PouchDBAction.update(fromMap(payload)))
+}
+
+const createPayload = (auth, target) => (
+  new Map(Object.entries({
+    ...target,
+    prevStates: target.states,
     options: {
-      auth: {
-        username: 'admin',
-        password: 'admin'
-      }
+      auth
     }
   }))
-}
+)
 
-const renderTarget = ({ dispatch }) => function AdminTarget(target, name) {
+const renderTarget = ({ dispatch, auth }) => function AdminTarget(target, name) {
   const AceEditor = requireAceEditor()
-  const map = new Map(Object.entries(target))
+  const payload = createPayload(auth, target)
 
   return (
     <div key={name}>
@@ -50,14 +53,14 @@ const renderTarget = ({ dispatch }) => function AdminTarget(target, name) {
         fontSize={14}
         highlightActiveLine
         mode="json"
-        onBlur={handleEditorBlur(map)}
+        onBlur={handleEditorBlur(payload)}
         setOptions={{ tabSize: 2, wrap: 80 }}
         showGutter={false}
         theme="xcode"
         value={JSON.stringify(target.states, null, 2)}
       />
       <button
-        onClick={handleUpdate(map, dispatch)}
+        onClick={handleUpdate(payload, dispatch)}
         type="button"
       >
         {'Update'}
@@ -86,7 +89,8 @@ const decorate = R.pipe(
   pureRender,
   createComponent(
     {
-      targets: AdminStore
+      targets: AdminStore,
+      auth: AuthStore
     }
   )
 )
