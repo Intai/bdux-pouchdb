@@ -16,48 +16,27 @@ const requireAceEditor = () => {
   }
 }
 
-const diffDocs = (states, newStates) => {
-  if (states._id) {
-    // a single document.
-    return !R.equals(states, newStates) && newStates
-  } else if (states.length > 0) {
-    // array of documents.
-    return R.difference(newStates, states)
-  } else {
-    // object contains documents.
-    return R.mapObjIndexed(
-      (value, key) => diffDocs(states[key], value),
-      newStates
-    )
-  }
-}
+const fromMap = R.reduce(
+  (accum, [key, value]) => R.assoc(key, value, accum),
+  {}
+)
 
 const handleEditorBlur = (map) => (e, editor) => {
-  const states = map.get('states')
-  const newStates = JSON.parse(editor.getValue())
-  map.set('diff', diffDocs(states, newStates))
-  //map.set('without', withoutStates(states, newStates))
+  const value = editor.getValue()
+  map.set('prevStates', map.get('states'))
+  map.set('states', value && JSON.parse(value))
 }
 
-const handlePut = (map, dispatch) => {
-  const diff = map.get('diff')
-  if (diff) {
-    dispatch(PouchDBAction.put({
-      name: map.get('name'),
-      states: map.get('states'),
-      diff,
-      options: {
-        auth: {
-          username: 'admin',
-          password: 'admin'
-        }
+const handleUpdate = (map, dispatch) => () => {
+  dispatch(PouchDBAction.update({
+    ...fromMap(map),
+    options: {
+      auth: {
+        username: 'admin',
+        password: 'admin'
       }
-    }))
-  }
-}
-
-const handleUpdate = (...args) => () => {
-  handlePut(...args)
+    }
+  }))
 }
 
 const renderTarget = ({ dispatch }) => function AdminTarget(target, name) {

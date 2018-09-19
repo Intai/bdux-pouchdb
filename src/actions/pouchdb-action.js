@@ -48,7 +48,7 @@ const fetchDocs = (name, { createIndex, find }) => {
 const mapToStore = (to) => (docs) => (
   (to && to.storeName)
     ? R.objOf(to.storeName, docs)
-    : R.mergeAll(docs)
+    : docs
 )
 
 const sinkDocs = (sink, name, config) => {
@@ -190,7 +190,10 @@ const addConfig = (propName, func) => (config) => {
   if (args) {
     return func(config)
       .map(R.objOf('states'))
-      .map(R.assoc('name', args.src || args.name))
+      .map(R.merge({
+        name: args.src || args.name,
+        config
+      }))
   }
 }
 
@@ -219,58 +222,131 @@ export const createUpdate = (config) => {
   })
 }
 
+const mapDocArrays = (func, arr1, arr2) => (
+  R.map((val2) => (
+    func(
+      val2._id && R.find(R.eqProps('_id', val2), arr1),
+      val2
+    )
+  ), arr2)
+)
+
+const mapDocObjs = (func, obj1, obj2) => (
+  R.mapObjIndexed((val2, key) => (
+    func(obj1[key], val2)
+  ), obj2)
+)
+
 const mergePutResponse = (doc) => ({ id, rev }) => ({
   ...doc,
   _id: id,
   _rev: rev
 })
 
-const putDoc = (db) => (doc) => (
-  db[doc._id ? 'put' : 'post'](doc)
-    .then(mergePutResponse(doc))
+const putDoc = (db) => (prev, doc) => (
+  R.equals(prev, doc)
+    ? Promise.resolve(doc)
+    : db[doc._id ? 'put' : 'post'](doc)
+      .then(mergePutResponse(doc))
 )
 
-const mapDocsP = (func, isDoc) => (states) => {
-  if (states._id || isDoc === true) {
+const mapDocsP = (func) => (prev, states) => {
+  if ('_id' in states) {
     // a single document.
-    return func(states)
-  } else if (states.length > 0) {
+    return func(prev, states)
+  } else if (states.length >= 0) {
     // array of documents.
-    const promises = R.map(mapDocsP(func, true), states)
+    const promises = mapDocArrays(mapDocsP(func), prev, states)
     return Promise.all(promises)
   } else {
     // object contains documents.
-    const pairs = R.toPairs(states)
-    const keys = R.pluck(0, pairs)
-    const values = R.pluck(1, pairs)
-    const promises = R.map(mapDocsP(func), values)
-    return Promise.all(promises)
-      .then(R.zipObj(keys))
+    const promises = mapDocObjs(mapDocsP(func), prev, states)
+    return Promise.all(R.values(promises))
+      .then(R.zipObj(R.keys(promises)))
   }
 }
 
-const sinkPutUpdate = (sink, name) => (states) => {
+const sinkPutUpdate = (sink, name, config) => (states) => {
   sink({
     type: ActionTypes.POUCHDB_PUT,
     states,
-    admin: { name, states },
+    admin: { name, config, states },
     skipLog: true
   })
   sink(new Bacon.End())
 }
 
-const sinkPutError = (sink) => (error) => {
+const sinkError = (sink) => (error) => {
   sink(new Bacon.Error(error))
   sink(new Bacon.End())
 }
 
-export const put = ({ name, states, diff, options }) => (
+const setDefaultDocId = R.merge({
+  _id: null
+})
+
+const setDefaultDocIds = R.ifElse(
+  R.is(Array),
+  R.map(setDefaultDocId),
+  setDefaultDocId
+)
+
+const setDefaultDocIdsByConfig = ({ config, states }) => (
+  !(config.to && config.to.storeName)
+    ? setDefaultDocIds(states || [])
+    : R.evolve({
+      [config.to.storeName]: setDefaultDocIds
+    }, states || {})
+)
+
+const initDocIds = (func) => (args) => (
+  func({
+    ...args,
+    states: setDefaultDocIdsByConfig(args)
+  })
+)
+
+export const put = initDocIds(({ name, config, prevStates, states, options }) => (
   Bacon.fromBinder((sink) => {
     const db = new PouchDB(name, options)
-    mapDocsP(putDoc(db))(diff)
-      .then(sinkPutUpdate(sink, name))
-      .catch(sinkPutError(sink))
+    mapDocsP(putDoc(db))(prevStates, states)
+      .then(sinkPutUpdate(sink, name, config))
+      .catch(sinkError(sink))
   })
+))
+
+const removeDoc = (db) => (prev, doc) => (
+  doc
+    ? Promise.resolve()
+    : db.put({ ...prev, _deleted: true })
+)
+
+const diffDocsP = (func) => (prev, states) => {
+  if ('_id' in prev) {
+    // a single document.
+    return func(prev, states)
+  } else if (prev.length >= 0) {
+    // array of documents.
+    const promises = mapDocArrays(R.flip(diffDocsP(func)), states, prev)
+    return Promise.all(promises)
+  } else {
+    // object contains documents.
+    const promises = mapDocObjs(R.flip(diffDocsP(func)), states, prev)
+    return Promise.all(R.values(promises))
+  }
+}
+
+export const remove = ({ name, prevStates, states, options }) => (
+  Bacon.fromBinder((sink) => {
+    const db = new PouchDB(name, options)
+    diffDocsP(removeDoc(db))(prevStates, states)
+      .catch(sinkError(sink))
+  })
+)
+
+export const update = R.pipe(
+  R.juxt([put, remove]),
+  Bacon.mergeAll
 )
 
 const createConfigChain = () => {

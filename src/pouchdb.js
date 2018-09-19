@@ -15,9 +15,14 @@ const hasPouchState = ({ name, action }) => (
   action.states && R.has(name, action.states)
 )
 
+const mergeAll = R.when(
+  R.is(Array),
+  R.mergeAll
+)
+
 const getPouchState = (args) => {
   const { action, name } = args
-  return R.assoc('state', action.states[name], args)
+  return R.assoc('state', mergeAll(action.states)[name], args)
 }
 
 const mapPouchUpdate = R.when(
