@@ -25,13 +25,21 @@ const hasName = R.path(
   ['action', 'admin', 'name']
 )
 
+const hasUpdate = ({ state, action: { admin } }) => (
+  !state || state[admin.name] !== admin
+)
+
 const accumByName = (args) => {
   const { action: { admin } } = args
   return R.assocPath(['state', admin.name], admin, args)
 }
 
 const updateForAdmin = R.when(
-  R.both(isAdminUpdateOrPut, hasName),
+  R.allPass([
+    isAdminUpdateOrPut,
+    hasName,
+    hasUpdate
+  ]),
   accumByName
 )
 
