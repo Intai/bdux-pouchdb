@@ -18,8 +18,21 @@ const getValue = (propName) => R.pipe(
   R.defaultTo('')
 )
 
-const Auth = ({ bindToDispatch, auth }) => (
-  <form>
+const isSignedIn = ({ auth }) => (
+  auth && auth.isSignedIn === true
+)
+
+const renderSignOut = ({ bindToDispatch }) => (
+  <button
+    onClick={bindToDispatch(AuthAction.signOut)}
+    type="button"
+  >
+    Sign out
+  </button>
+)
+
+const renderForm = ({ bindToDispatch, auth }) => (
+  <form onSubmit={bindToDispatch(AuthAction.signIn)}>
     <input
       name="username"
       onChange={bindToDispatch(setUsername)}
@@ -36,6 +49,12 @@ const Auth = ({ bindToDispatch, auth }) => (
       Sign in
     </button>
   </form>
+)
+
+const Auth = R.ifElse(
+  isSignedIn,
+  renderSignOut,
+  renderForm
 )
 
 const decorate = R.pipe(

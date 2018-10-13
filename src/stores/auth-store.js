@@ -25,6 +25,34 @@ const setPassword = R.when(
   mergeProp('password')
 )
 
+const signIn = R.when(
+  isAction(ActionTypes.SIGN_IN),
+  R.assocPath(['state', 'isSignedIn'], true)
+)
+
+const signOut = R.when(
+  isAction(ActionTypes.SIGN_OUT),
+  R.over(
+    R.lensProp('state'),
+    R.flip(R.merge)({
+      isSignedIn: false,
+      username: '',
+      password: ''
+    })
+  )
+)
+
+const unauthorise = R.when(
+  isAction(ActionTypes.UNAUTHORISE),
+  R.over(
+    R.lensProp('state'),
+    R.flip(R.merge)({
+      isSignedIn: false,
+      error: 'unauthorized'
+    })
+  )
+)
+
 export const getReducer = () => {
   const reducerStream = new Bacon.Bus()
 
@@ -33,6 +61,9 @@ export const getReducer = () => {
     output: reducerStream
       .map(setUsername)
       .map(setPassword)
+      .map(signIn)
+      .map(signOut)
+      .map(unauthorise)
       .map(R.prop('state'))
   }
 }
