@@ -266,12 +266,19 @@ const sinkPutUpdate = (sink, name, config) => (states) => {
     type: ActionTypes.POUCHDB_PUT,
     states,
     admin: { name, config, states },
-    skipLog: true
   })
   sink(new Bacon.End())
 }
 
-const sinkError = (sink) => (error) => {
+const sinkError = (sink, retry) => (error) => {
+  if (error.status === 401) {
+    sink({
+      type: ActionTypes.UNAUTHORISE,
+      retry,
+      error,
+    })
+  }
+
   sink(new Bacon.Error(error))
   sink(new Bacon.End())
 }
@@ -301,14 +308,19 @@ const initDocIds = (func) => (args) => (
   })
 )
 
-export const put = initDocIds(({ name, config, prevStates, states, options }) => (
-  Bacon.fromBinder((sink) => {
+const retry = (func, args) => (update) => (
+  func(update(args))
+)
+
+export const put = initDocIds((args) => {
+  const { name, config, prevStates, states, options } = args
+  return Bacon.fromBinder((sink) => {
     const db = new PouchDB(name, options)
     mapDocsP(putDoc(db))(prevStates, states)
       .then(sinkPutUpdate(sink, name, config))
-      .catch(sinkError(sink))
+      .catch(sinkError(sink, retry(put, args)))
   })
-))
+})
 
 const removeDoc = (db) => (prev, doc) => (
   doc
@@ -331,13 +343,14 @@ const diffDocsP = (func) => (prev, states) => {
   }
 }
 
-export const remove = ({ name, prevStates, states, options }) => (
-  Bacon.fromBinder((sink) => {
+export const remove = (args) => {
+  const { name, prevStates, states, options } = args
+  return Bacon.fromBinder((sink) => {
     const db = new PouchDB(name, options)
     diffDocsP(removeDoc(db))(prevStates, states)
-      .catch(sinkError(sink))
+      .catch(sinkError(sink, retry(remove, args)))
   })
-)
+}
 
 export const update = R.pipe(
   R.juxt([put, remove]),

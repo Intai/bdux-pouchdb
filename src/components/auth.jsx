@@ -22,6 +22,15 @@ const isSignedIn = ({ auth }) => (
   auth && auth.isSignedIn === true
 )
 
+const handleSubmit = ({ dispatch, auth }) => () => {
+  if (auth.error && auth.retry) {
+    dispatch(auth.retry(
+      R.assocPath(['options', 'auth'], auth)
+    ))
+  }
+  dispatch(AuthAction.signIn())
+}
+
 const renderSignOut = ({ bindToDispatch }) => (
   <button
     onClick={bindToDispatch(AuthAction.signOut)}
@@ -31,25 +40,28 @@ const renderSignOut = ({ bindToDispatch }) => (
   </button>
 )
 
-const renderForm = ({ bindToDispatch, auth }) => (
-  <form onSubmit={bindToDispatch(AuthAction.signIn)}>
-    <input
-      name="username"
-      onChange={bindToDispatch(setUsername)}
-      type="text"
-      value={getValue('username')(auth)}
-    />
-    <input
-      name="password"
-      onChange={bindToDispatch(setPassword)}
-      type="password"
-      value={getValue('password')(auth)}
-    />
-    <button type="submit">
-      Sign in
-    </button>
-  </form>
-)
+const renderForm = (props) => {
+  const { bindToDispatch, auth } = props
+  return (
+    <form onSubmit={handleSubmit(props)}>
+      <input
+        name="username"
+        onChange={bindToDispatch(setUsername)}
+        type="text"
+        value={getValue('username')(auth)}
+      />
+      <input
+        name="password"
+        onChange={bindToDispatch(setPassword)}
+        type="password"
+        value={getValue('password')(auth)}
+      />
+      <button type="submit">
+        Continue
+      </button>
+    </form>
+  )
+}
 
 const Auth = R.ifElse(
   isSignedIn,

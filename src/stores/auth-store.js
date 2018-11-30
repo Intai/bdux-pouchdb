@@ -42,14 +42,31 @@ const signOut = R.when(
   )
 )
 
+const mergeUnauthoriseRetry = (args) => {
+  const { state, action } = args
+  return R.merge(args, {
+    state: {
+      ...state,
+      isSignedIn: false,
+      error: 'unauthorized',
+      retry: action.retry,
+    }
+  })
+}
+
 const unauthorise = R.when(
   isAction(ActionTypes.UNAUTHORISE),
+  mergeUnauthoriseRetry
+)
+
+const clearError = R.when(
+  R.either(
+    isAction(ActionTypes.SIGN_IN),
+    isAction(ActionTypes.SIGN_OUT)
+  ),
   R.over(
     R.lensProp('state'),
-    R.flip(R.merge)({
-      isSignedIn: false,
-      error: 'unauthorized'
-    })
+    R.omit(['error', 'retry'])
   )
 )
 
@@ -64,6 +81,7 @@ export const getReducer = () => {
       .map(signIn)
       .map(signOut)
       .map(unauthorise)
+      .map(clearError)
       .map(R.prop('state'))
   }
 }
