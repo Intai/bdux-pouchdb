@@ -48,7 +48,7 @@ const mergeUnauthoriseRetry = (args) => {
     state: {
       ...state,
       isSignedIn: false,
-      error: 'unauthorized',
+      error: action.error,
       retry: action.retry,
     }
   })

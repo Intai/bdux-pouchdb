@@ -1,81 +1,90 @@
 import * as R from 'ramda'
-import React from 'react'
+import React, { useMemo, useCallback } from 'react'
 import * as AuthAction from '../actions/auth-action'
 import AuthStore from '../stores/auth-store'
-import { pureRender } from './decorators/pure-render'
-import { createComponent } from 'bdux'
+import { createUseBdux } from 'bdux'
 
-const setUsername = (e) => (
-  AuthAction.setUsername(e.target.value)
-)
-
-const setPassword = (e) => (
-  AuthAction.setPassword(e.target.value)
-)
+const retryAuth = (auth) => {
+  if (auth.error && auth.retry) {
+    return auth.retry(R.assocPath(['options', 'auth'], auth))
+  }
+}
 
 const getValue = (propName) => R.pipe(
   R.propOr('', propName),
   R.defaultTo('')
 )
 
-const isSignedIn = ({ auth }) => (
+const isSignedIn = (auth) => (
   auth && auth.isSignedIn === true
 )
 
-const handleSubmit = ({ dispatch, auth }) => () => {
-  if (auth.error && auth.retry) {
-    dispatch(auth.retry(
-      R.assocPath(['options', 'auth'], auth)
-    ))
-  }
-  dispatch(AuthAction.signIn())
+const handleSubmit = (action) => () => {
+  action.retry()
+  action.signIn()
 }
 
-const renderSignOut = ({ bindToDispatch }) => (
+const renderSignOut = (signOut) => (
   <button
-    onClick={bindToDispatch(AuthAction.signOut)}
+    onClick={signOut}
     type="button"
   >
     Sign out
   </button>
 )
 
-const renderForm = (props) => {
-  const { bindToDispatch, auth } = props
-  return (
-    <form onSubmit={handleSubmit(props)}>
-      <input
-        name="username"
-        onChange={bindToDispatch(setUsername)}
-        type="text"
-        value={getValue('username')(auth)}
-      />
-      <input
-        name="password"
-        onChange={bindToDispatch(setPassword)}
-        type="password"
-        value={getValue('password')(auth)}
-      />
-      <button type="submit">
-        Continue
-      </button>
-    </form>
-  )
+const getErrorMessage = R.pathOr(
+  '', ['error', 'message']
+)
+
+const renderError = (auth) => (
+  <div>
+    {getErrorMessage(auth)}
+  </div>
+)
+
+const renderForm = (auth, action) => (
+  <form onSubmit={handleSubmit(action)}>
+    {renderError(auth)}
+    <input
+      name="username"
+      onChange={action.setUsername}
+      type="text"
+      value={getValue('username')(auth)}
+    />
+    <input
+      name="password"
+      onChange={action.setPassword}
+      type="password"
+      value={getValue('password')(auth)}
+    />
+    <button type="submit">
+      Continue
+    </button>
+  </form>
+)
+
+const userBdux = createUseBdux({
+  auth: AuthStore
+})
+
+const Auth = (props) => {
+  const { state, dispatch, bindToDispatch } = userBdux(props)
+  const { auth } = state
+  const signIn = useMemo(() => bindToDispatch(AuthAction.signIn), [bindToDispatch])
+  const signOut = useMemo(() => bindToDispatch(AuthAction.signOut), [bindToDispatch])
+  const setUsername = useCallback((e) => dispatch(AuthAction.setUsername(e.target.value)), [dispatch])
+  const setPassword = useCallback((e) => dispatch(AuthAction.setPassword(e.target.value)), [dispatch])
+  const retry = useCallback(() => dispatch(retryAuth(auth)), [auth, dispatch])
+
+  return isSignedIn(auth)
+    ? renderSignOut(signOut)
+    : renderForm(auth, {
+      signIn,
+      setUsername,
+      setPassword,
+      retry,
+    })
 }
 
-const Auth = R.ifElse(
-  isSignedIn,
-  renderSignOut,
-  renderForm
-)
-
-const decorate = R.pipe(
-  pureRender,
-  createComponent(
-    {
-      auth: AuthStore
-    }
-  )
-)
-
-export default decorate(Auth)
+export default Auth
