@@ -54,7 +54,7 @@
     "gulp-babel": "^8.0.0",
     "gulp-eslint": "^6.0.0",
     "jsdom": "^15.1.1",
-    "mocha": "^6.2.0",
+    "mocha": "^10.2.0",
     "nyc": "^14.1.1",
     "pouchdb": "^7.0.0",
     "pouchdb-find": "^7.0.0",
